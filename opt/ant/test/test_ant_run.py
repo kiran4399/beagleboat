@@ -1,27 +1,29 @@
-import os
 import unittest
 import importlib
-import sys
-import inspect
-import random
-import ant_colony as module
 
+#source: http://stackoverflow.com/a/11158224/5343977
+import os,sys,inspect
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
 sys.path.insert(0,parentdir) 
 
+import ant_colony as module
+
 class TestAntRun(unittest.TestCase):
 	def test_correct(self):
+		#Note: can't do this in setup because of python2's wonky OOP, doing it in the test instead
 		
 		class test_empty_object(module.ant_colony.ant):
 			def __init__(self):
 				from threading import Thread
 				Thread.__init__(self)
+			#def run(self): pass
 			def _traverse(self): pass
 			def _update_route(self): pass
 			def _update_distance_traveled(self): pass
 		test_object = test_empty_object()
 		
+		#setting up object environment
 		test_object.location = 0
 		test_object.route = []
 		test_object.distance_traveled = 0
@@ -41,7 +43,8 @@ class TestAntRun(unittest.TestCase):
 		self.assertEqual(test_object.possible_locations, [])
 		self.assertTrue(self.called_traverse)
 		
+		#cleanup
 		del self.called_traverse
 
 if __name__ == '__main__':
-unittest.main()
+    unittest.main()

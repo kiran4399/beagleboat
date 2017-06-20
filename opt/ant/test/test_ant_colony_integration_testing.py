@@ -1,23 +1,43 @@
-import os
 import unittest
 import importlib
-import sys
-import inspect
-import random
-import ant_colony as module
 
+#source: http://stackoverflow.com/a/11158224/5343977
+import os,sys,inspect
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
 sys.path.insert(0,parentdir) 
 
+import ant_colony as module
+
+#give distance between two GPS locations
 def distance_on_earth(start, end):
+	"""
+	Gives distance between two points.
+	start and end are assumed to be in decimal representation of latitude and longitude
+	each lat / long pair are assumed to be in standard lat / long order
+	sources: http://www.movable-type.co.uk/scripts/latlong.html
+		http://www.codecodex.com/wiki/Calculate_Distance_Between_Two_Points_on_a_Globe#Python
+		(modified the above code, from non-standard input ordering [long / lat])
+	Example: distance((37.7689269, -122.4029053), (37.7768800, -122.3911496))
+	Return: 1.36002518696 km
+	(example lat / long pairs are, respectively: airbnb and dropbox headquarters in SF CA)
+	"""
+	import math
 
 	def recalculate_coordinate(val,  _as=None):  
+		""" 
+		Accepts a coordinate as a tuple (degree, minutes, seconds) 
+		You can give only one of them (e.g. only minutes as a floating point number) and it will be duly 
+		recalculated into degrees, minutes and seconds. 
+		Return value can be specified as 'deg', 'min' or 'sec'; default return value is a proper coordinate tuple. 
+		"""  
 		deg,  min,  sec = val  
+		# pass outstanding values from right to left  
 		min = (min or 0) + int(sec) / 60  
 		sec = sec % 60  
 		deg = (deg or 0) + int(min) / 60  
 		min = min % 60  
+		# pass decimal part from left to right  
 		dfrac,  dint = math.modf(deg)  
 		min = min + dfrac * 60  
 		deg = dint  
@@ -32,6 +52,17 @@ def distance_on_earth(start, end):
 		return deg,  min,  sec
 
 	def points2distance(start,  end):  
+		""" 
+		Calculate distance (in kilometers) between two points given as (long, latt) pairs 
+		based on Haversine formula (http://en.wikipedia.org/wiki/Haversine_formula). 
+		Implementation inspired by JavaScript implementation from http://www.movable-type.co.uk/scripts/latlong.html 
+		Accepts coordinates as tuples (deg, min, sec), but coordinates can be given in any form - e.g. 
+		can specify only minutes: 
+		(0, 3133.9333, 0)  
+		is interpreted as  
+		(52.0, 13.0, 55.998000000008687) 
+		which, not accidentally, is the lattitude of Warsaw, Poland. 
+		"""  
 		start_long = math.radians(recalculate_coordinate(start[1],  'deg'))  
 		start_latt = math.radians(recalculate_coordinate(start[0],  'deg'))  
 		end_long = math.radians(recalculate_coordinate(end[1],  'deg'))  
@@ -43,6 +74,9 @@ def distance_on_earth(start, end):
 		return 6371 * c
 	
 	def decdeg2dms(dd):
+		"""
+		Source: http://stackoverflow.com/a/12737895/5343977
+		"""
 		negative = dd < 0
 		dd = abs(dd)
 		minutes,seconds = divmod(dd*3600,60)
@@ -56,6 +90,7 @@ def distance_on_earth(start, end):
 				seconds = -seconds
 		return (degrees,minutes,seconds)
 	
+	#converting to degrees / minutes / seconds representation, as points2distance() requires it
 	start_dms = (decdeg2dms(start[0]), decdeg2dms(start[1]))
 	end_dms = (decdeg2dms(end[0]), decdeg2dms(end[1]))
 	return float(points2distance(start_dms, end_dms))
@@ -64,15 +99,20 @@ class TestAntColonyIntegrationTesting(unittest.TestCase):
 	def test_short_run_two_ants_simple_distance(self):
 		module.debug = False
 		
-		
-		testing_nodes = {0 : (1, 2), 1 : (3, 8), 2 : (6, 3),}
+		#setup
+		testing_nodes = {
+						0 : (1, 2),
+						1 : (3, 8),
+						2 : (6, 3),
+						}
 		
 		def testing_distance_callback(start, end):
 			return 1
 		
-		
+		import random
 		random_choice_backup = random.choice
 		
+		#force the ants to choose the path 0 -> 1 -> 2
 		self.next = 0
 		self.choice = [0, 1, 2, 1, 2]
 		def mock_random_choice(*args):
@@ -81,11 +121,11 @@ class TestAntColonyIntegrationTesting(unittest.TestCase):
 			
 		random.choice = mock_random_choice
 		
-		
+		#testing
 		test_object = module.ant_colony(testing_nodes, testing_distance_callback, ant_count=2)
 		self.assertEqual([0, 1, 2], test_object.mainloop())
 		
-		
+		#cleanup
 		del self.next
 		del self.choice
 		random.choice = random_choice_backup
@@ -93,27 +133,42 @@ class TestAntColonyIntegrationTesting(unittest.TestCase):
 	def test_short_run_with_optimal_path(self):
 		module.debug = False
 		
+		#setup
+		testing_nodes = {
+						0 : (0, 0),
+						1 : (1, 1),
+						2 : (2, 2),
+						3 : (3, 3),
+						}
 		
-		testing_nodes = {0 : (0, 0), 1 : (1, 1), 2 : (2, 2), 3 : (3, 3),}
-		
+		#we want to force the ant to follow the path 0 -> 1 -> 2 -> 3, as it should have the shortest distance of 3 (all other paths return a 3 distance)
 		def testing_distance_callback(start, end):
+			#_DEBUG("[testing_distance_callback()] START")
+			# _DEBUG(start)
+			# _DEBUG(end)
 			if (start == (0, 0) and end == (1, 1)) or (start == (1, 1) and end == (0, 0)):
+				# _DEBUG("[testing_distance_callback()] saw 0 -> 1")
+				# _DEBUG("[testing_distance_callback()] END")
 				return 1.0
 			if (start == (1, 1) and end == (2, 2))or (start == (2, 2) and end == (1, 1)):
+				# _DEBUG("[testing_distance_callback()] saw 1 -> 2")
+				# _DEBUG("[testing_distance_callback()] END")
 				return 1.0
 			if (start == (2, 2) and end == (3, 3))or (start == (3, 3) and end == (2, 2)):
+				# _DEBUG("[testing_distance_callback()] saw 2 -> 3")
+				# _DEBUG("[testing_distance_callback()] END")
 				return 1.0
-			
+			#_DEBUG("[testing_distance_callback()] END")
 			return 3.0
 		
-		
+		#testing
 		test_object = module.ant_colony(testing_nodes, testing_distance_callback)
 		self.assertEqual([0, 1, 2, 3], test_object.mainloop())
 		
 	def test_medium_run_with_optimal_path(self):
 		module.debug = False
 		
-		
+		#setup
 		testing_nodes = {
 						0 : (0, 0),
 						1 : (1, 1),
@@ -140,15 +195,15 @@ class TestAntColonyIntegrationTesting(unittest.TestCase):
 				return 1.0
 			return 3.0
 		
-		
+		#testing
 		test_object = module.ant_colony(testing_nodes, testing_distance_callback)
-		
+		#_DEBUG(test_object.mainloop())
 		self.assertEqual([0, 1, 2, 3, 4, 5, 6], test_object.mainloop())
 		
 	def test_long_run_with_optimal_path(self):
 		module.debug = False
 		
-		
+		#setup
 		testing_nodes = {
 						0 : (0, 0),
 						1 : (1, 1),
@@ -184,12 +239,12 @@ class TestAntColonyIntegrationTesting(unittest.TestCase):
 				return 1.0
 			return 4.0
 		
-		
+		#testing
 		test_object = module.ant_colony(testing_nodes, testing_distance_callback)
-		
+		#_DEBUG(test_object.mainloop())
 		self.assertEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], test_object.mainloop())
 	
-	
+	#codeEval sample data
 	
 	def test_code_eval_6_node(self):
 		module.debug = False
@@ -203,9 +258,13 @@ class TestAntColonyIntegrationTesting(unittest.TestCase):
 			5: (37.7706628, -122.4040139),
 			}
 		
-		
+		#testing
 		test_object = module.ant_colony(mapping, distance_on_earth)
+		#_DEBUG(test_object.mainloop())
+		
+		#code eval is 1 indexed, rather than 0, so add 1 to each value of the nodes passed back as the solution route
 		solution = [(x+1) for x in test_object.mainloop()]
+		#_DEBUG(solution)
 		test_solution = [1, 3, 2, 5, 6, 4]
 		self.assertEqual(test_solution, solution)
 	
@@ -225,10 +284,10 @@ class TestAntColonyIntegrationTesting(unittest.TestCase):
 		test_solution = [1, 6, 4, 8, 5, 3, 2, 7, 9, 10]
 		test_object = module.ant_colony(mapping, distance_on_earth)
 		solution = [(x+1) for x in test_object.mainloop()]
-	
+		#_DEBUG(solution)
 		self.assertEqual(test_solution, solution)
 	
-	
+	#randomly generated data tests	
 	def test_random_walk_1(self):
 		mapping = {
 				0 : (54.22763857131542, -100.62179306195173),
@@ -247,6 +306,7 @@ class TestAntColonyIntegrationTesting(unittest.TestCase):
 		
 		test_object = module.ant_colony(mapping, distance_on_earth)
 		solution = test_object.mainloop()
+		#_DEBUG(solution)
 		self.assertEqual(test_solution, solution)
 		
 	def test_random_walk_2(self):
@@ -267,6 +327,7 @@ class TestAntColonyIntegrationTesting(unittest.TestCase):
 		
 		test_object = module.ant_colony(mapping, distance_on_earth)
 		solution = test_object.mainloop()
+		#_DEBUG(solution)
 		self.assertEqual(test_solution, solution)
 		
 	def test_random_walk_3(self):
@@ -287,6 +348,7 @@ class TestAntColonyIntegrationTesting(unittest.TestCase):
 		
 		test_object = module.ant_colony(mapping, distance_on_earth)
 		solution = test_object.mainloop()
+		#_DEBUG(solution)
 		self.assertEqual(test_solution, solution)
 	
 	def test_random_walk_4(self):
@@ -307,6 +369,7 @@ class TestAntColonyIntegrationTesting(unittest.TestCase):
 		
 		test_object = module.ant_colony(mapping, distance_on_earth)
 		solution = test_object.mainloop()
+		#_DEBUG(solution)
 		self.assertEqual(test_solution, solution)
 		
 	def test_random_walk_5(self):
@@ -327,6 +390,7 @@ class TestAntColonyIntegrationTesting(unittest.TestCase):
 		
 		test_object = module.ant_colony(mapping, distance_on_earth)
 		solution = test_object.mainloop()
+		#_DEBUG(solution)
 		self.assertEqual(test_solution, solution)
 		
 	def test_random_walk_6(self):
@@ -347,6 +411,7 @@ class TestAntColonyIntegrationTesting(unittest.TestCase):
 		
 		test_object = module.ant_colony(mapping, distance_on_earth)
 		solution = test_object.mainloop()
+		#_DEBUG(solution)
 		self.assertEqual(test_solution, solution)
 		
 	def test_random_walk_7(self):
@@ -367,6 +432,7 @@ class TestAntColonyIntegrationTesting(unittest.TestCase):
 		
 		test_object = module.ant_colony(mapping, distance_on_earth)
 		solution = test_object.mainloop()
+		#_DEBUG(solution)
 		self.assertEqual(test_solution, solution)
 		
 	def test_random_walk_8(self):
@@ -386,6 +452,7 @@ class TestAntColonyIntegrationTesting(unittest.TestCase):
 		
 		test_object = module.ant_colony(mapping, distance_on_earth)
 		solution = test_object.mainloop()
+		#_DEBUG(solution)
 		self.assertEqual(test_solution, solution)
 		
 	def test_random_walk_9(self):
@@ -406,8 +473,8 @@ class TestAntColonyIntegrationTesting(unittest.TestCase):
 		
 		test_object = module.ant_colony(mapping, distance_on_earth)
 		solution = test_object.mainloop()
-
+		#_DEBUG(solution)
 		self.assertEqual(test_solution, solution)
 
 if __name__ == '__main__':
-unittest.main
+    unittest.main()
