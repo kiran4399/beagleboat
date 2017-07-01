@@ -1,4 +1,5 @@
 import socket
+import TSYS01
 import sys
 import Adafruit_DHT
 
@@ -6,6 +7,7 @@ if __name__ == "__main__":
 
 
 
+	ts_sensor=TSYS01.TSYS01(0x77)
 	# Parse command line parameters.
 	sensor_args = { '11': Adafruit_DHT.DHT11,
                 '22': Adafruit_DHT.DHT22,
@@ -30,8 +32,13 @@ if __name__ == "__main__":
 
 	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	sock.connect(("192.168.43.12", 9000))
-	data = str(temperature) + 'k' + str(humidity)
+	data = str(temperature) + 'k' + str(humidity) + str(ts_sensor.readTemp()) 
 	sock.sendall(data)
 	result = sock.recv(1024)
 	print result
 	sock.close()
+
+
+
+
+
